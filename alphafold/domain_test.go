@@ -25,9 +25,9 @@ func TestDomainInfo(t *testing.T) {
 
 func TestClassify(t *testing.T) {
 	cases := []struct{ in, typ, id string }{
-		{"wiki/Go", "page", "wiki/Go"},
-		{"/about/", "page", "about"},
-		{"https://" + Host + "/team/contact", "page", "team/contact"},
+		{"P04637", "prediction", "P04637"},
+		{"Q5VSL9", "prediction", "Q5VSL9"},
+		{"AF-P04637-F1", "prediction", "AF-P04637-F1"},
 	}
 	for _, tc := range cases {
 		typ, id, err := Domain{}.Classify(tc.in)
@@ -38,11 +38,34 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+func TestClassifyEmpty(t *testing.T) {
+	_, _, err := Domain{}.Classify("")
+	if err == nil {
+		t.Error("Classify(\"\") should return an error")
+	}
+}
+
 func TestLocate(t *testing.T) {
-	got, err := Domain{}.Locate("page", "wiki/Go")
-	want := "https://" + Host + "/wiki/Go"
-	if err != nil || got != want {
-		t.Errorf("Locate = (%q, %v), want (%q, nil)", got, err, want)
+	cases := []struct {
+		uriType, id, want string
+	}{
+		{"prediction", "P04637", "https://alphafold.ebi.ac.uk/entry/P04637"},
+		{"prediction", "AF-P04637-F1", "https://alphafold.ebi.ac.uk/entry/AF-P04637-F1"},
+		{"prediction", "Q5VSL9", "https://alphafold.ebi.ac.uk/entry/Q5VSL9"},
+	}
+	for _, tc := range cases {
+		got, err := Domain{}.Locate(tc.uriType, tc.id)
+		if err != nil || got != tc.want {
+			t.Errorf("Locate(%q, %q) = (%q, %v), want (%q, nil)",
+				tc.uriType, tc.id, got, err, tc.want)
+		}
+	}
+}
+
+func TestLocateUnknownType(t *testing.T) {
+	_, err := Domain{}.Locate("page", "foo")
+	if err == nil {
+		t.Error("Locate with unknown type should return an error")
 	}
 }
 
@@ -56,21 +79,22 @@ func TestHostWiring(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p := &Page{ID: "wiki/Go", URL: "https://" + Host + "/wiki/Go", Title: "Go", Body: "Go is a language."}
+	p := &Prediction{
+		ID:          "AF-P04637-F1",
+		Gene:        "TP53",
+		Description: "Cellular tumor antigen p53",
+		GlobalScore: 71.79,
+	}
 	u, err := h.Mint(p)
 	if err != nil {
 		t.Fatalf("Mint: %v", err)
 	}
-	if want := "alphafold://page/wiki/Go"; u.String() != want {
+	if want := "alphafold://prediction/AF-P04637-F1"; u.String() != want {
 		t.Errorf("Mint = %q, want %q", u.String(), want)
 	}
 
-	if body, ok := h.Body(p); !ok || body == "" {
-		t.Errorf("Body = (%q, %v), want non-empty", body, ok)
-	}
-
-	got, err := h.ResolveOn("alphafold", "about")
-	if err != nil || got.String() != "alphafold://page/about" {
-		t.Errorf("ResolveOn = (%q, %v), want alphafold://page/about", got.String(), err)
+	got, err := h.ResolveOn("alphafold", "Q5VSL9")
+	if err != nil || got.String() != "alphafold://prediction/Q5VSL9" {
+		t.Errorf("ResolveOn = (%q, %v), want alphafold://prediction/Q5VSL9", got.String(), err)
 	}
 }
